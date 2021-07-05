@@ -1,0 +1,22 @@
+connectors:
+    primary:
+        host: '10.0.129.73'
+        dbname: 'postgres'
+        user: 'hs'
+        password: '111111'
+    backOfficeDB:
+        host: 'cmsdb01.ho01-em.nl4'
+        dbname: 'cms2'
+        user: 'hs'
+        password: '111111'
+    posting:
+        dsn: "pgsql:host=cmsdb01.ho01-em.nl4;dbname=postgres"
+        user: 'hs'
+        password: '111111'
+    clearing:
+        dsn: "pgsql:host=10.0.129.55;dbname=backacq"
+        user: 'postgres'   gfva xxxx
+        password: '111111'
+    urls:
+        webService: http://10.0.129.61:8080
+        payServer: http://10.0.129.72:8080
