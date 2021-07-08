@@ -1,15 +1,15 @@
 import pytest
-#from Common.Db import db_connect
+from Common.Db import db_connect_back
 from psycopg2 import Error
 
-from conftest import db_connect
+#from conftest import db_connect
 
 
-class Test_Dbquery:
+class Dbquery:
 
     @staticmethod
-    def test_get_max_de011():
-        connection = db_connect("backOfficeDB")
+    def get_max_de011():
+        connection = db_connect_back()
         try:
             cursor = connection.cursor()
             query = '''SELECT 

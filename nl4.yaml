@@ -15,7 +15,7 @@ connectors:
         password: '111111'
     clearing:
         dsn: "pgsql:host=10.0.129.55;dbname=backacq"
-        user: 'postgres'   gfva xxxx
+        user: 'postgres'
         password: '111111'
     urls:
         webService: http://10.0.129.61:8080
