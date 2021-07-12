@@ -55,39 +55,10 @@ class StdClass:
     pass
 
 
-class CardBalance:
-
-    def __init__(self, amount, card_id, trans_type):
-        self.amount = amount
-        self.card_id = card_id
-        self.trans_type = trans_type
-
-    def get_fi_code(self):
-        fi_code = self.card_id.split('-')[0]
-        return fi_code
-
-    def make_data(self):
-        data = {
-            'amount': self.amount,
-            'cardId': self.card_id,
-            'ccyCode': '978',
-            'fiCode': self.get_fi_code(),
-            'mtype': 'status',
-            'rid': '',
-            'sign': '',
-            'transType': self.trans_type
-        }
-        return json.dumps(data)
-
-
-card = CardBalance('200', '00020001-625661427214', 'D')
-print(card.make_data())
-
-
 class PersonData:
-    def __init__(self, agent_id, product_id, name, last_name):
+    def __init__(self, agent_id, product_id, first_name, last_name):
         self.productId = product_id
-        self.name = name
+        self.first_name = first_name
         self.last_name = last_name
         self.agent_id = agent_id
 
@@ -97,7 +68,7 @@ class PersonData:
                 "address": "street?build?flat_office",
                 "city": "Kursk",
                 "country": "643",
-                "mailFirstName": self.name,
+                "mailFirstName": self.first_name,
                 "mailLastName": self.last_name,
                 "zipCode": "305005"
             },
@@ -116,7 +87,7 @@ class PersonData:
                     "address": "street?build?flat_office",
                     "city": "Kursk",
                     "country": "643",
-                    "mailFirstName": self.name,
+                    "mailFirstName": self.first_name,
                     "mailLastName": self.last_name,
                     "state": "KurskState",
                     "zipCode": "305005"
@@ -129,7 +100,7 @@ class PersonData:
             "person": {
                 "contactCode": "apitest",
                 "dateOfBirthday": "1990-03-23",
-                "firstName": self.name,
+                "firstName": self.first_name,
                 "lastName": self.last_name,
                 "middleName": "{{$randomAbbreviation}}",
                 "nationality": "643",
@@ -137,20 +108,107 @@ class PersonData:
             },
             "sign": ""
         }
-        return data
+        return json.dumps(data)
 
 
 class CardData(PersonData):
-    def __init__(self, account_id, person_id, agent_id, product_id, name, last_name):
-        super().__init__(agent_id, product_id, name, last_name)
+    def __init__(self, person_id, account_id, agent_id, product_id, first_name, last_name):
+        super().__init__(agent_id, product_id, first_name, last_name)
         self.account_id = account_id
         self.person_id = person_id
 
+    @staticmethod
+    def get_agent_id(id):
+        fi_code = id.split('-')[0]
+        return fi_code
+
+    def make_data(self):
+        data = {
+            "contact": {
+                "email": "maaazzz@mail.ru",
+                "phone": "+790452749999"
+            },
+            "identificator": {
+                "agentIdentificator": self.get_agent_id(self.person_id),
+                "rid": ""
+            },
+            "issuingData": {
+                "accountId": self.account_id,
+                "appId": "",
+                "deliveryAddress": {
+                    "address": "street?build?flat_office",
+                    "city": "Kursk",
+                    "country": "643",
+                    "mailFirstName": "maleksander",
+                    "mailLastName": "maaazzz",
+                    "state": "KurskState",
+                    "zipCode": "305005"
+                },
+                "personId": self.person_id,
+                "productId": self.productId,
+                "urgencyIssuing": 1,
+                "welcomePack": 1
+            },
+            "sign": ""
+        }
+        return json.dumps(data)
 
 
+class CardBalance(CardData):
 
-name = "maleksander" + str(random.randint(10, 99))
-lastname = "maaazzz" + str(random.randint(10, 99))
+    def __init__(self, amount, card_id, trans_type):
+        self.amount = amount
+        self.card_id = card_id
+        self.trans_type = trans_type
 
-l = PersonData('00020001', '900003', name, lastname)
-print(l.make_data())
+    def make_data(self):
+        data = {
+            'amount': self.amount,
+            'cardId': self.card_id,
+            'ccyCode': '978',
+            'fiCode': self.get_agent_id(self.card_id),
+            'mtype': 'status',
+            'rid': '',
+            'sign': '',
+            'transType': self.trans_type
+        }
+        return json.dumps(data)
+
+
+class SearchCard:
+
+    def __init__(self, app_id):
+        self.app_id = app_id
+
+    def make_data(self):
+        data = {
+            "appId": self.app_id,
+            "currentPage": "",
+            "firstName": "",
+            "fullPan": "",
+            "itemOnPage": "",
+            "lastName": "",
+            "otherNames": "",
+            "panFirstSix": "",
+            "panLastFour": "",
+            "phone": ""
+        }
+        return json.dumps(data)
+
+
+class CardLimitData:
+
+    def __init__(self, limit_id, limit_type, operation_type, value):
+        self.limit_id = limit_id
+        self.limit_type = limit_type
+        self.operation_type = operation_type
+        self.value = value
+
+    def make_data(self):
+        data = {
+            "id": self.limit_id,
+            "limitType": self.limit_type,
+            "operationType": self.operation_type,
+            "value": self.value
+        }
+        return json.dumps(data)
