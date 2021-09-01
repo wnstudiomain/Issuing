@@ -1,16 +1,36 @@
-from os import environ as env
 import random
+from datetime import datetime
+from os import environ as env
+from faker import Faker
+from os import path
 from Common import dbquery
-from pytest_bdd import scenario, given, when, then
+from Common import card_api
 import requests
 import json
 import Common.auth as auth
 import pytest
+import allure
+from Common import ConstantNL4 as Card
+from Common.parser import ParseXLSX
+from Common import trans
 
+headers = {"Content-type": "application/json; charset=UTF-8"}
 IP = env.get('HAP_URL')
-FIRST_NAME = "maleksander" + str(random.randint(100, 999))
-LAST_NAME = "maaazzz" + str(random.randint(100, 999))
+fake = Faker()
+FIRST_NAME = fake.first_name()
+LAST_NAME = fake.last_name()
 ROLE = 'MANUAL_ENTRY'
+FEATURE = 'Проверка HAP методов'
+card17 = Card.ConstantNL4.CARD_6807_NL4
+card1 = Card.ConstantNL4.CARD_9003_NL4
+card2 = Card.ConstantNL4.CARD_6286_NL4
+from_date = '2021-04-30'
+to_date = '2021-04-30'
+test_dir = path.dirname(path.abspath(__file__))
+arn = ' -'
+rrn = '112010000794'
+arn1 = '74570001053705301554129'
+rrn1 = '112009000739'
 
 
 @pytest.fixture(scope="module")
@@ -38,81 +58,91 @@ def put_request(get_token):
 
 
 @pytest.fixture
-def create_person_403(post_request):
-    def _send_create_person():
-        data = auth.StdClass()
-        card_data = auth.PersonData('00020001', '900003', FIRST_NAME, LAST_NAME)
-        data.params = card_data.make_data()
-        data.url = '/manual_entry/create_new_person'
-        return post_request(data)
-
-    return _send_create_person
-
-
-@pytest.fixture
-def create_new_card(create_person, post_request):
-    def _send_new_card():
-        resp = json.loads(create_person.text)
-        data = auth.StdClass()
-        person_data = auth.CardData(resp['personId'], resp['accountId'], '00020001', '900003', FIRST_NAME, LAST_NAME)
-        data.params = person_data.make_data()
-        data.url = '/manual_entry/create_new_card'
-        return post_request(data)
-
-    return _send_new_card
+def create_person_403(api_client, get_token):
+    card_data = card_api.PersonData('00020001', '900003', FIRST_NAME, LAST_NAME)
+    response = api_client.post(path='manual_entry/create_new_person',
+                               headers=headers,
+                               json=card_data.make_data(),
+                               auth=auth.BearerAuth(get_token))
+    with allure.step('Отправили запрос на создание нового пользователя'):
+        return response
 
 
 @pytest.fixture
-def change_card_balance(create_person, post_request):
-    def _send_change_card_balance():
-        resp = json.loads(create_person.text)
-        data = auth.StdClass()
-        card_data = auth.CardBalance('200', resp['appId'], 'C')
-        data.params = card_data.make_data()
-        data.url = '/manual_entry/change_card_balance'
-        return post_request(data)
+def create_new_card(create_person, api_client, get_token):
+    resp = json.loads(create_person.text)
+    card_data = card_api.CardData(resp['personId'], resp['accountId'], '00020001', '900003', FIRST_NAME, LAST_NAME)
+    response = api_client.post(path='manual_entry/create_new_card',
+                               headers=headers,
+                               json=card_data.make_data(),
+                               auth=auth.BearerAuth(get_token))
+    with allure.step('Отправили запрос на создание новой карты'):
+        return response
 
-    return _send_change_card_balance
 
-
-@pytest.fixture
-def search_card(create_person, post_request):
-    def _send_search_card():
-        resp = json.loads(create_person.text)
-        data = auth.StdClass()
-        search_data = auth.SearchCard(resp['appId'])
-        data.params = search_data.make_data()
-        data.url = '/cardholders/search'
-        return post_request(data)
-
-    return _send_search_card
+def create_new_card_manual(api_client, get_token, person_id, account_id):
+    card_data = card_api.CardData(person_id, account_id, '00020001', '900003', FIRST_NAME, LAST_NAME)
+    response = api_client.post(path='manual_entry/create_new_card',
+                               headers=headers,
+                               json=card_data.make_data(),
+                               auth=auth.BearerAuth(get_token))
+    return response
 
 
 @pytest.fixture
-def limit_card(create_person, put_request):
-    def _send_limit_card():
+def change_card_balance(create_person, api_client, get_token):
+    resp = json.loads(create_person.text)
+    card_data = card_api.CardBalance('500', resp['appId'], 'C')
+    response = api_client.post(path='manual_entry/change_card_balance',
+                               headers=headers,
+                               json=card_data.make_data(),
+                               auth=auth.BearerAuth(get_token))
+    with allure.step('Отправили запрос на пополнение карты'):
+        return response
+
+
+@pytest.fixture
+def search_card(create_person, api_client, get_token):
+    resp = json.loads(create_person.text)
+    search_data = auth.SearchCard(resp['appId'])
+    response = api_client.post(path='cardholders/search',
+                               headers=headers,
+                               json=search_data.make_data(),
+                               auth=auth.BearerAuth(get_token))
+    with allure.step('Отправили запрос на поиск карты'):
+        return response
+
+
+@pytest.fixture
+def limit_card(create_person, api_client, get_token):
+    def _send_limit_card(data):
         resp = json.loads(create_person.text)
-        data = auth.StdClass()
         app_id = resp['appId']
-        limit_data = auth.CardLimitData(make_id_for_card(app_id), 'card', 'all', 100)
+        limit_data = auth.CardLimitData(make_id_for_card(app_id), data.limit_type, data.operation_type, data.value)
         data.params = limit_data.make_data()
-        data.url = '/limit/daily'
-        return put_request(data)
+        response = api_client.put(path=data.url,
+                                  headers=headers,
+                                  json=limit_data.make_data(),
+                                  auth=auth.BearerAuth(get_token))
+        with allure.step('Отправили запрос на изменение лимитов'):
+            return response
+
     return _send_limit_card
 
 
 @pytest.fixture
-def change_admin_role(post_request):
-    def _send_change_admin_role():
-        data = auth.StdClass()
-        data.params = {
-            "id": 27,
-            "name": "POSTING_FULL"
-        }
-        json.dumps(data.params)
-        data.url = '/admin/role/add/roleTemplateId/28'
-        return post_request(data)
-    return _send_change_admin_role
+def change_admin_role(api_client, get_token):
+    data = auth.StdClass()
+    data.params = {
+        "id": 27,
+        "name": "POSTING_FULL"
+    }
+    response = api_client.post(path='admin/role/add/roleTemplateId/28',
+                               headers=headers,
+                               json=data.params,
+                               auth=auth.BearerAuth(get_token))
+    with allure.step('Отправили запрос на изменение роли'):
+        return response
 
 
 @pytest.fixture
@@ -129,31 +159,56 @@ def change_all_role():
     set_all_roles()
 
 
-def make_id_for_card(app_id):
-    query = dbquery.Dbquery.get_cardcode_by_app_id((app_id,))
-    print(query[1].strftime("%Y-%m-%d"))
+@pytest.fixture
+def generate_statement_report(api_client, get_token):
+    def _return_report(data):
+        response = api_client.get(path='reports/transactions/card',
+                                  params=data,
+                                  auth=auth.BearerAuth(get_token))
+        with allure.step('Отправили запрос на генерацию отчета'):
+            return response
+
+    return _return_report
+
+
+def get_card_code(app_id):
+    return dbquery.Dbquery.get_cardcode_by_app_id((app_id,))
+
+
+def convert_card_code(query):
     return f'{query[0]}_{query[1].strftime("%Y-%m-%d")}'
+
+
+def make_id_for_card(app_id):
+    query = get_card_code(app_id)
+    return convert_card_code(query)
 
 
 def get_user_id():
     user_name = [env.get('HAP_LOGIN')]
     user_id = dbquery.Dbquery.get_user_id(user_name)
-    return user_id[0]
+    with allure.step('Нашли id пользователя {} в БД'.format(user_name)):
+        return user_id[0]
 
 
 def get_role_id():
     role_id = dbquery.Dbquery.get_role_id([ROLE])
-    return role_id[0]
+    with allure.step('Нашли id роли {} в БД'.format(ROLE)):
+        return role_id[0]
 
 
 def delete_role():
+    user_name = env.get('HAP_LOGIN')
     data = [get_user_id(), get_role_id()]
-    dbquery.Dbquery.remove_role(data)
+    with allure.step('Удалили у пользователя {} роль {}'.format(user_name, ROLE)):
+        dbquery.Dbquery.remove_role(data)
 
 
 def add_role():
+    user_name = env.get('HAP_LOGIN')
     data = [get_user_id(), get_role_id()]
-    dbquery.Dbquery.add_role(data)
+    with allure.step('Вернули пользователяю {} роль {}'.format(user_name, ROLE)):
+        dbquery.Dbquery.add_role(data)
 
 
 def remove_all_roles():
@@ -168,31 +223,342 @@ def set_all_roles():
     dbquery.Dbquery.add_role_multi(var)
 
 
-def test_manual_entry_0001(create_person_403, change_role):
-    resp1 = create_person_403()
-    assert resp1.status_code == 403
+def get_card_limit(app_id):
+    query = dbquery.Dbquery.get_cardcode_by_app_id((app_id,))
+    limit_arr = dbquery.Dbquery.get_card_limit((query[0], query[1].strftime("%Y-%m-%d")))
+    return limit_arr
 
 
-def test_manual_entry_0002(create_new_card, change_role):
-    resp1 = create_new_card()
-    assert resp1.status_code == 403
+def get_arn(seqno):
+    if seqno:
+        seqno_d = seqno.split(':')
+        seqno_for_query = dbquery.Dbquery.get_arn(seqno_d)
+        return seqno_for_query
+    else:
+        pass
 
 
-def test_manual_entry_0003(change_card_balance, change_role):
-    resp1 = change_card_balance()
-    assert resp1.status_code == 403
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/create_new_person')
+def test_manual_entry_0001(change_role, create_person_403):
+    with allure.step('Пользователь не создался, так как нет роли {}'.format(ROLE)):
+        assert create_person_403.status_code == 403
 
 
-def test_manual_entry_0004(change_all_role, search_card):
-    resp1 = search_card()
-    assert resp1.status_code == 403
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/create_new_card')
+def test_manual_entry_0002(change_role, create_new_card):
+    with allure.step('Карта не создалась, так как нет роли {}'.format(ROLE)):
+        assert create_new_card.status_code == 403
 
 
-def test_manual_entry_0005(change_all_role, limit_card):
-    resp1 = limit_card()
-    assert resp1.status_code == 403
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/change_card_balance')
+def test_manual_entry_0003(change_role, change_card_balance):
+    with allure.step('Баланс карты не поплнен, так как нет роли {}'.format(ROLE)):
+        assert change_card_balance.status_code == 403
 
 
-def test_manual_entry_0006(change_admin_role, change_all_role):
-    resp1 = change_admin_role()
-    assert resp1.status_code == 403
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/create_new_person')
+def test_manual_entry_0004(create_person):
+    with allure.step('Полльзователь успешно создан'):
+        assert create_person.status_code == 200
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/create_new_card')
+def test_manual_entry_0005(create_new_card):
+    with allure.step('Карта успешно создана'):
+        assert create_new_card.status_code == 200
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод manual_entry/change_card_balance')
+def test_manual_entry_0006(change_card_balance):
+    with allure.step('Баланс карты успешно пополнен'):
+        assert change_card_balance.status_code == 200
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод cardholders/search')
+@pytest.mark.xfail(reason="Превышение привилегий | ISNG-1162")
+def test_manual_entry_0007(change_all_role, search_card):
+    with allure.step('Поиск карты не выполнился, так как нет роли CARD_INFO_READ или CARD_INFO_FULL'):
+        assert search_card.status_code == 403
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод /limit/')
+@pytest.mark.xfail(reason="Превышение привилегий | ISNG-1162")
+def test_manual_entry_0008(change_all_role, limit_card, create_person):
+    data = auth.StdClass()
+    data.value = 223344
+    data.limit_type = 'card'
+    data.operation_type = 'payment'
+    data.url = 'limit/daily'
+    resp = limit_card(data)
+    with allure.step('Лимиты не установились, так как нет роли CARD_INFO_FULL'):
+        assert resp.status_code == 403
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка ролевой модели')
+@allure.title('Метод admin/role/add/roleTemplateId/28')
+def test_manual_entry_0009(change_all_role, change_admin_role):
+    with allure.step('Роль не изменилсь, так как нет прав на изменение ролей'):
+        assert change_admin_role.status_code == 403
+
+
+@allure.feature(FEATURE)
+@allure.story('Функциональная проверка методов для карт /limit/')
+@allure.title('Проверка кода ответа')
+@pytest.mark.parametrize('method', ['daily', 'monthly', 'yearly'])
+@pytest.mark.parametrize('limit_type, operation_type, value, in_base', [
+    ('card', 'payment', 223344, 'climit'),
+    ('card', 'all', 223344, 'alimit'),
+    ('card', 'retail', 223344, 'rlimit'),
+])
+def test_manual_entry_0010(limit_card, create_person, method, limit_type, operation_type, value, in_base):
+    """/hap/limit/daily | payment"""
+    data = auth.StdClass()
+    data.value = value
+    data.limit_type = limit_type
+    data.operation_type = operation_type
+    data.url = 'limit/' + method
+    resp = limit_card(data)
+    with allure.step('Код ответа 200 метода limit/{} тип операции {}-{}'.format(method, limit_type, operation_type)):
+        assert resp.status_code == 200
+    resp = json.loads(create_person.text)
+    app_id = resp['appId']
+    if method == 'yearly':
+        method = method[:-2]
+    with allure.step('Сравнение установленного значения лимита {} со значением в БД'.format(value)):
+        assert data.value == get_card_limit(app_id)[method + in_base]
+    # обнуляю лимиты
+    data.value = -1
+    with allure.step('Обнуляем установленный лимит'):
+        limit_card(data)
+
+
+def convert_card(card):
+    snew = "".join((card[:6], "XXXXXX", card[12:]))
+    card = ' '.join([snew[i:i + 4] for i in range(0, len(snew), 4)])
+    return card
+
+
+def format_auth_data(data):
+    ARN = get_arn(data['fseqno'])
+    if ARN:
+        arn = ARN[0]
+    else:
+        arn = ' -'
+    arr = list()
+    arr.append(data['description'] + data['cmscode'])
+    arr.append(data['keydate'].strftime("%Y-%m-%d"))
+    if data['datemercbatch'] is not None:
+        arr.append(data['datemercbatch'].strftime("%Y-%m-%d"))
+    else:
+        arr.append('')
+    arr.append(f'{data["rnn"]}/{arn}')
+    if data['rnn'] is not None:
+        arr.append(dbquery.Dbquery.get_auth_code([data["rnn"]]))
+    if data['posdata'] is not None:
+        arr.append(data['posdata'])
+    else:
+        arr.append('')
+    arr.append(convert_card(data['card']))
+    arr.append(data['appid'])
+    if data['accotbval'] is not None:
+        arr.append("{:.2f}".format(data['accotbval']))
+    else:
+        arr.append('')
+    arr.append("{:.2f}".format(data['transvalue']))
+    arr.append(data['transcur'])
+    arr.append("{:.2f}".format(data['billvalue']))
+    arr.append(data['billcur'])
+    if data['origbillvalue'] is not None:
+        arr.append("{:.2f}".format(data['origbillvalue']))
+    else:
+        arr.append('')
+    if data['origbillcur'] is not None:
+        arr.append(data['origbillcur'])
+    else:
+        arr.append('')
+    if data['mercname'] is not None:
+        arr.append(data['mercname'])
+    else:
+        arr.append(data['de43'])
+    arr.append(data['mcc'])
+    return arr
+
+
+def format_row(row):
+    if row[8] is not None:
+        row[8] = "{:.2f}".format(float(row[8]))
+    row[9] = "{:.2f}".format(float(row[9]))
+    row[11] = "{:.2f}".format(float(row[11]))
+    if row[13]:
+        row[13] = "{:.2f}".format(float(row[13]))
+    return row
+
+
+@allure.feature(FEATURE)
+@allure.story('Функциональная проверка методов генерации репортов /reports/transactions/card')
+@allure.title('Проверка значений')
+@pytest.mark.parametrize('rrn, arn', [(rrn, arn), (rrn1, arn1)])
+def test_manual_entry_0011(generate_statement_report, rrn, arn):
+    card_code = dbquery.Dbquery.get_cardcode_by_pan([card17['de002']])
+    with allure.step('Получам id по карте для генерации запроса'):
+        code_id = convert_card_code(card_code)
+    params = {
+        'id': code_id,
+        'fromDate': from_date,
+        'toDate': to_date
+    }
+    with allure.step('Отправляем запрос для генерации отчета'):
+        response = generate_statement_report(params)
+    filename = test_dir + '/../../../temp/transactions_' + code_id + '_' + from_date + '_' + to_date + '_' + str(
+        datetime.timestamp(datetime.now())) + '.xlsx'
+    with open(filename, 'wb') as f:
+        f.write(response.content)
+    search_cell = f'{rrn}/{arn}'
+    with allure.step('Парсим отчет, находим строку с искомым параметром'):
+        row_from_file = ParseXLSX(filename, 'Sheet1')
+        row = row_from_file.search_value_in_row(search_cell)
+    with allure.step('Получаем данные из БД для сравнения с данными из отчета'):
+        expected_data = dbquery.Dbquery.get_auth_data([rrn])
+    format_data = format_auth_data(expected_data)
+    with allure.step('Сравниваем'):
+        assert format_row(row) == format_data
+
+
+@allure.feature(FEATURE)
+@allure.story('Проверка методов manual_entry')
+@allure.title('Метод manual_entry/change_card_balance')
+def test_manual_entry_0012(change_card_balance):
+    with allure.step('Баланс карты не поплнен, так как нет роли {}'.format(ROLE)):
+        assert change_card_balance.status_code == 200
+    print(type(change_card_balance.text))
+
+
+def test_01():
+    # cnp.send_data()
+    # print(cnp.send_data().text)
+    # auh1 = auth.VSDCAuth(card1['de002'], card1['de014'], 760, 978, card1['de035'], card1['de052'],
+    #                   card1['de055'])
+    # auh1 = auth.CPToken(card1['de002'], card1['de014'], 760, 978, card1['de035'], '4785673328152165')
+    # cash = auth.Cash(card1['de002'], card1['de014'], 760, 978, card1['de035'], card1['de052'], card1['de055_2'])
+    # oct = auth.OCT(card1['de002'], card1['de014'], 760, 643)
+
+    # auh.send_data()
+    # cash.send_data()
+    cnp = auth.CNPAuth(card1['de002'], card1['de014'], 1000, 978)
+    # cnp.de060 = '010000000702'
+    resp = cnp.send_data()
+    transastion = trans.Posting(cnp.__dict__)
+    print(transastion.make_data_vi())
+    # de062 = cnp.de062
+    # r = json.loads(resp.text)
+    # data = {key: value for (key, value) in r['data']['data'].items()}
+    # print(data['de007'])
+    # cnp.make_reversal(data['de007'], data['de011'], data['de037'], data['de038'], de062)
+
+
+def test_posting():
+    OCT = auth.OCT(card17['de002'], card17['de014'], 7600, 978)
+    VSDC = auth.VSDC(card1['de002'], card1['de014'], 7600, 978, card1['de035'], card1['de052'], card1['de055'])
+    CNP = auth.CNPToken(card17['de002'], card17['de014'], 1000, 978, '4785673328152165')
+    data_mult = dict()
+    data_mult['0'] = OCT.send_data()
+    # data_mult[1] = VSDC.send_data()
+    # data_mult[2] = CNP.send_data()
+    t1 = trans.Posting(data_mult)
+    t1.make_posting()
+
+
+def calculate_trans(data):
+    credit = 0
+    debit = 0
+    for val in data:
+        # print(val)
+        if (val['creditdebit'] == 0):
+            debit = round(debit + val['billvalue'], 2)
+        else:
+            credit = round(credit + val['billvalue'], 2)
+
+    # print(f"credit: {credit}; debit: {debit}")
+    return {'credit': credit, 'debit': debit}
+
+
+def get_exchange_rate(auth_val, bill_val):
+    return round(auth_val / bill_val, 4)
+
+
+def test_statemetn_1():
+    start_date = '2021-08-01'
+    end_date = '2021-08-31'
+    account_number = 'IDC21452A'
+    card_code = dbquery.Dbquery.get_accno_by_pan([card17['de002']])[0]
+    trans_data = dbquery.Dbquery.get_data_statement((card_code, start_date, end_date))
+    calculate_trans(trans_data)
+    print(trans_data)
+    person = dbquery.Dbquery.get_person_data((card_code,))
+    r_name = f"{person[2]} {person[3]}"
+    r_address = f"{person[7]} {person[5]} {person[6]} {person[8]}"
+    r_period = f"{start_date.replace('-', '/')} - {end_date.replace('-', '/')}"
+    r_account = account_number
+    r_currency_acc = person[9]
+    r_debit = calculate_trans(trans_data)['debit']
+    r_credit = calculate_trans(trans_data)['credit']
+
+    for value in trans_data:
+        auth_val = value['transvalue']
+        bill_val = value['billvalue']
+        rate = get_exchange_rate(auth_val, bill_val)
+        r_posting_date = value['postingdate'].strftime("%Y-%m-%d")
+        r_tid = value['tid']
+        r_details = {
+            'ttype': 'Purchase',
+            'auth_date': value['datetime'],
+            'card': convert_card(value['card']),
+            'amount': value['transvalue'],
+            'currency': value['transcur'],
+            'rate': rate if (value['transcur'] != value['billcur']) else '',
+            'mercname': value['mercname'],
+            'country': value['country']
+        }
+        r_trans_amount = value['billvalue']
+        r_trans_cur = value['billcur']
+        print(r_posting_date, r_tid, r_details, r_trans_amount, r_trans_cur)
+
+    print(r_name, r_address, r_period, r_account, r_currency_acc, r_debit, r_credit)
+
+    # new_card = create_new_card_manual(api_client, get_token, '00020001-628670672903', '00020001-628670672903')
+    # print(new_card.text)
+
+
+def test_statemetn_2():
+    pan = dbquery.Dbquery.get_pan_by_appid(('00020001-628686699885',))
+    print(pan)
+
+
+def test_create_person():
+    card_data = card_api.PersonData('00010001', '100092', FIRST_NAME, LAST_NAME)
+    card_data.create()
+    # card_data.send_data()
+    # resp = api_client.post(path='manual_entry/create_new_person',
+    #                        headers=headers,
+    #                        json=card_data.make_data(),
+    #                        auth=auth.BearerAuth(get_token))
+    # print(json.dumps(json.loads(resp.text), sort_keys=True, indent=4))
+    # with allure.step('Создали нового персона'):
+    #     return resp
