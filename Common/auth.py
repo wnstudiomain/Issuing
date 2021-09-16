@@ -1,14 +1,12 @@
 import datetime
 from abc import abstractmethod
-from faker import Faker
 from Common.client import APIClient
 import json
 import random
 from os import environ as env
 from Common import ConstantNL4 as Card, dbquery
 import pycountry
-
-card17 = Card.ConstantNL4.CARD_6807_NL4
+import time
 
 
 def encode_ebcdic(text):
@@ -101,7 +99,7 @@ class Auth:
         self.de004 = str(de004)
         self.de006 = str(de004)
         self.de007 = self._pref07field()
-        self.de011 = dbquery.Dbquery.get_max_de011()
+        self.de011 = self._pref11field()
         self.de012 = '*'
         self.de013 = '*'
         self.de014 = de014
@@ -110,12 +108,12 @@ class Auth:
         self.de022 = '0710'
         self.de025 = '00'
         self.de032 = '498750'
-        self.de037 = self.pref37field() + self.de011
+        self.de037 = self._pref37field() + self.de011
         self.de041 = 'TERMID01'
         self.de042 = '498750000236704'
         self.de043 = 'FUMINOR033-A. SAHAROVA 20RIGA         LV'
         self.de049 = de049
-        self.de051 = de049
+        self.de051 = '978'
         self.de056 = {
             '01': {
                 '1': self.encode('V0010013821083272189654140003')
@@ -123,16 +121,19 @@ class Auth:
         }
         self.de060 = '05000010'
         self.de062 = {
-            '1': 'E',
             '23': 'I ',
             '2': '3001633827' + str(random.randint(10000, 99999))
         }
         self.de063 = '8000000002'
-        self.de039 = ''
-        self.de038 = ''
 
     @staticmethod
-    def pref37field():
+    def _pref11field():
+        times = str(time.time())
+        new_time = times.split('.')[0][-4:] + times.split('.')[1][0:2]
+        return new_time
+
+    @staticmethod
+    def _pref37field():
         y = str(datetime.datetime.today().year)
         day = datetime.datetime.today().strftime("%j")
         h = datetime.datetime.today().strftime("%H")
@@ -176,7 +177,7 @@ class Auth:
                     'de043': self.de043,
                     'de049': str(self.de049),
                     'de051': str(self.de051),
-                    # 'de056': self.de056,
+                    'de056': self.de056,
                     'de060': self.de060,
                     'de062': self.de062,
                     'de063': self.de063,
@@ -186,6 +187,10 @@ class Auth:
             data['data'][name] = val
         # print(json.dumps(data, sort_keys=True, indent=4))
         return data
+
+    @staticmethod
+    def make_token():
+        return f'4785673328{random.randint(000000, 999999)}'
 
     @abstractmethod
     def _get_data(self):
@@ -203,18 +208,79 @@ class Auth:
             data['data']['de038'] = response_data['de038']
         if response_data.get('de039') is not None:
             data['data']['de039'] = response_data['de039']
+            data['data']['mti_resp'] = response_data['mti']
         print(json.dumps(response_data, sort_keys=True, indent=4))
         return data['data']
 
-    def make_reversal(self, de007, de011, de037, de038, de062):
+    def make_reversal(self, de038=None, de002=None, de007=None, de011=None, de032=None, de037=None, de042=None,
+                      tid=None):
+        mti = self.mti
         self.mti = '0400'
         self.de063 = 'A0000000022501'
-        self.de011 = de011
-        self.de037 = de037
-        self.de062 = de062
-        de090 = '0100' + self.de011 + de007 + self.de032.zfill(11) + '00000000000'
-        data = self._make_data(de038=de038, de090=de090)
-        self.send_data(data)
+        if de002 is not None:
+            self.de002 = de002
+        if de011 is not None:
+            self.de011 = de011
+        if de032 is not None:
+            self.de032 = de032
+        if de037 is not None:
+            self.de037 = de037
+        if de042 is not None:
+            self.de042 = de042
+        if tid is not None:
+            self.de062['2'] = tid
+        if de007 is not None:
+            de007_original = de007
+        else:
+            de007_original = self.de007
+        if de007 is not None and de011 is not None and de032 is not None:
+            de090 = mti + de011 + de007 + de032.zfill(11) + '00000000000'
+        else:
+            de090 = mti + self.de011 + de007_original + self.de032.zfill(11) + '00000000000'
+        self.de007 = self._pref07field()
+        if de038 is not None:
+            return self._make_data(de038=de038, de090=de090)
+        else:
+            return self._make_data(de090=de090)
+
+    def make_partial_reversal(self, new_summ, de038=None, de002=None, de007=None, de011=None, de032=None, de037=None,
+                              de042=None, tid=None):
+        mti = self.mti
+        self.mti = '0400'
+        self.de063 = 'A0000000022504'
+        if de002 is not None:
+            self.de002 = de002
+        if de007 is not None:
+            self.de007 = de007
+        if de011 is not None:
+            self.de011 = de011
+        if de032 is not None:
+            self.de032 = de032
+        if de037 is not None:
+            self.de037 = de037
+        if de042 is not None:
+            self.de042 = de042
+        if tid is not None:
+            self.de062['2'] = tid
+        if de007 is not None:
+            de007_original = de007
+        else:
+            de007_original = self.de007
+        if de007 is not None and de011 is not None and de032 is not None:
+            de090 = mti + de011 + de007 + de032.zfill(11) + '00000000000'
+        else:
+            de090 = mti + self.de011 + de007_original + self.de032.zfill(11) + '00000000000'
+        self.de007 = self._pref07field()
+        de061 = str(new_summ).zfill(36)
+        de095 = str(new_summ).zfill(12) + '000000000000000000000000000000'
+        if de038 is not None:
+            return self._make_data(de038=de038, de090=de090, de061=de061, de095=de095)
+        else:
+            return self._make_data(de090=de090, de061=de061, de095=de095)
+
+    def make_stip(self, de039):
+        self.mti = '0120'
+        return self._make_data(de039=de039)
 
 
 class CNPAuth(Auth):
@@ -222,13 +288,30 @@ class CNPAuth(Auth):
     def __init__(self, de002, de014, de004, de049):
         super().__init__(de002, de014, de004, de049)
         self.de044 = '              2'
-        self.de022 = '0100'
+        # Field 22—Point-of-Service Entry Mode Code
+        # Card-Not-Present Recurring Payment Transactions: The value in field positions 1
+        # and 2 must be 01 or 10
+        # Position 3: PIN Entry Capability
+        # 2 - Terminal cannot accept PINs
+        self.de022 = '0120'
+        # Field 25—Point-of-Service Condition Code
+        # 59 - E-commerce request through public network - Internet transaction.
         self.de025 = '59'
         self.de003 = '000000'
-        self.de060 = '0100000005'
+        # Field 60—Additional POS Information
+        # 60.1 - 5 - On premises of cardholder, unattended eP
+        # 60.2 - 1 - Terminal not used
+        # 60.8 - 05 - SET with cardholder certificate
+        self.de060 = '5100000005'
+        # доработать в Сашином приложении
+        # self.de126 = {
+        #     '9': '0009010871161500000002589782437559441171',
+        #     '13': self.encode('C'),
+        #     '20': self.encode('9')
+        # }
 
     def _get_data(self):
-        return self._make_data()
+        return self._make_data(de044=self.de044)
 
 
 class VSDC(Auth):
@@ -239,14 +322,15 @@ class VSDC(Auth):
         self.de055 = de055
         self.de052 = de052
         self.de023 = '001'
+        self.de053 = '2001010100000000'
 
     def _get_data(self):
-        return self._make_data(de035=self.de035, de055=self.de055, de023=self.de023, de052=self.de052)
+        return self._make_data(de035=self.de035, de053=self.de053, de055=self.de055, de023=self.de023, de052=self.de052)
 
 
 class CNPToken(CNPAuth):
 
-    def __init__(self, de002, de014, de004, de049, token):
+    def __init__(self, de002, de014, de004, de049, token=Auth.make_token()):
         super().__init__(de002, de014, de004, de049)
         self.token = self.encode(token)
         self._2 = self.encode('  ')
@@ -279,11 +363,13 @@ class CNPToken(CNPAuth):
 
 class CPToken(CNPToken):
 
-    def __init__(self, de002, de014, de004, de049, de035, token):
+    def __init__(self, de002, de014, de004, de049, de035, token=Auth.make_token()):
         super().__init__(de002, de014, de004, de049, token)
         self.de044 = '    2   2'
         self.de035 = de035
         self.de060 = '05000040'
+        self.de022 = '0710'
+        self.de025 = '00'
 
     def _make_123_67_68(self):
         data = {
@@ -298,10 +384,10 @@ class CPToken(CNPToken):
         return self._make_data(de035=self.de035, de044=self.de044, de123=self._make_123_67_68())
 
 
-class Cash(Auth):
+class ATMCash(VSDC):
 
     def __init__(self, de002, de014, de004, de049, de035, de052, de055):
-        super().__init__(de002, de014, de004, de049)
+        super().__init__(de002, de014, de004, de049, de035, de052, de055)
         self.de035 = de035
         self.de052 = de052
         self.de055 = de055
@@ -309,11 +395,33 @@ class Cash(Auth):
         self.de018 = '6011'
         self.de022 = '0510'
         self.de025 = '02'
-        self.de053 = '2001010100000000'
         self.de060 = '25000010'
 
-    def _get_data(self):
-        return self._make_data(de035=self.de035, de052=self.de052, de055=self.de055)
+        def _get_data(self):
+            return self._make_data(de053=self.de053)
+
+
+class MCash(VSDC):
+
+    def __init__(self, de002, de014, de004, de049, de035, de052, de055):
+        super().__init__(de002, de014, de004, de049, de035, de052, de055)
+        self.de035 = de035
+        self.de052 = de052
+        self.de055 = de055
+        self.de003 = '012000'
+        self.de018 = '6010'
+        self.de022 = '0710'
+        self.de025 = '00'
+        self.de060 = '05000010'
+
+
+class Recurring(CNPAuth):
+    def __init__(self, de002, de014, de004, de049):
+        super().__init__(de002, de014, de004, de049)
+        self.de025 = '08'
+        self.de022 = '1020'
+        self.de060 = '0100000002'
+        # self.de126 = '0008000000000000D9'
 
 
 class OCT(Auth):
@@ -324,15 +432,78 @@ class OCT(Auth):
         self.de018 = '4829'
         self.de025 = '05'
         self.de022 = '0100'
+        # Field 48, Usage 37—Original Credit Transaction (OCT)
         self.de048 = 'OCT000000031071981'
+        # Field 60—Additional POS Information
         self.de060 = '0100000007'
+        self.de104 = '5700040102C6C45F007C0110F0F0F0F0F0F0F0F0F1F6F1F9F8F8F6F7031EC289958195838540C4898789A3819340D3899489A3858440C289958195830423C8A48240F2F640C8A495A2A69699A38840D38195856B40C393858392888581A396956B050BC393858392888581A396950703F8F2F60802F0F40A0D89829996408194819989938496 '
 
     def _get_data(self):
+        return self._make_data(de048=self.de048, de104=self.de104)
+
+
+class AFT(CNPAuth):
+
+    def __init__(self, de002, de014, de004, de049):
+        super().__init__(de002, de014, de004, de049)
+        self.de003 = '100000'
+        self.de018 = '4829'
+        self.de104 = '5700040102D7D7'
+
+    def _get_data(self):
+        return self._make_data(de104=self.de104, de044=self.de044)
+
+
+class Refund(CNPToken):
+
+    def __init__(self, de002, de014, de004, de049, token=Auth.make_token()):
+        super().__init__(de002, de014, de004, de049, token)
+        self.de003 = '200000'
+
+
+# Инитная операция в отеле
+class HotelAuth(CPToken):
+
+    def __init__(self, de002, de014, de004, de049, de035, token=Auth.make_token()):
+        super().__init__(de002, de014, de004, de049, de035, token)
+        # MCC 3618: Отели, мотели, курорты
+        self.de018 = '3618'
+        self.de060 = '050000400002'
+        self.de043 = 'THE BALMORAL HOTEL       EDINBURGH    GB'
+
+    def make_inc(self, de004, de049):
+        self.de063 = 'A0000000023900'
+        self.de007 = self._pref07field()
+        self.de004 = de004
+        self.de006 = de004
+        self.de049 = de049
+        self.de051 = de049
         return self._make_data()
 
 
-def convert_de126():
-    str = '660016C004F1F0F5F0D00EF1F0F5F0404040404040404040406800480110F4F6F3F6F6F3F1F9F4F1F0F0F1F4F5F102024040030BF4F0F0F1F0F0F3F0F2F7F30604F2F3F1F20702F0F28001008108F9F6F2F3F6F1F3F58201008301608401028503000D2F'
+class AFD(CPToken):
+
+    def __init__(self, de002, de014, de004, de049, de035):
+        super().__init__(de002, de014, de004, de049, de035)
+        self.de018 = '5542'
+        self.de041 = '60050063'
+        self.de043 = 'WM MORRISONS PETROL OP   BOLTON       GB'
+        self.de060 = '350000400001'
+
+    def afd_advice(self, de038, de004, de006=None):
+        self.mti = '0120'
+        self.de004 = de004
+        if de006 is None:
+            self.de006 = de004
+        else:
+            self.de006 = de006
+        self.de007 = self._pref07field()
+        self.de011 = self._pref11field()
+        return self._make_data(de038=de038)
+
+
+def convert_tlv():
+    str = '0100729F34034402029F2701809F3501259F090200969F3303E0B8E89505008000E0009F3704B9735CBE9F100706001203A420029F26080B8D2E1C638BBED29F36020006820238009C01009F1A0208269A032109159F02060000000001005F2A0208269F03060000000000008407A0000000031010'
     i = 0
     data = dict()
     while i < len(str):
@@ -355,4 +526,4 @@ def convert_de126():
     print(json.dumps(data, sort_keys=True, indent=4))
 
 
-# convert_de126()
+convert_tlv()

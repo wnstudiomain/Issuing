@@ -9,9 +9,9 @@ class APIClient:
     def make_url(self, path):
         return '/'.join([self.base_path, path])
 
-    def post(self, path=None, params=None, json=None, headers=None, auth=None):
+    def post(self, path=None, params=None, json=None, headers=None, auth=None, body=None):
         url = self.make_url(path)
-        return requests.post(url=url, params=params, json=json, headers=headers, auth=auth)
+        return requests.post(url=url, params=params, json=json, headers=headers, auth=auth, data=body)
 
     def put(self, path=None, params=None, json=None, headers=None, auth=None):
         url = self.make_url(path)

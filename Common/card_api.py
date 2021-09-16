@@ -92,7 +92,6 @@ class PersonData:
         return data
 
     def create(self):
-        self.make_data()
         token = get_token()
         ip = env.get('HAP_URL')
         api_client = APIClient(ip)

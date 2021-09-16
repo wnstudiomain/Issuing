@@ -1,27 +1,16 @@
-class Blah:
+import asyncio
+import aiohttp
 
-    def __init__(self, name):
-        self.name = name
+urls = ['http://www.google.com', 'http://www.yandex.ru', 'http://www.python.org']
 
-    def __call__(self):
-        return self.name
+async def call_url(url):
+    print('Starting {}'.format(url))
+    response = await aiohttp.get(url)
+    data = await response.text()
+    print('{}: {} bytes: {}'.format(url, len(data), data))
+    return data
 
-    @staticmethod
-    def run(self):
-        print(self)
+futures = [call_url(url) for url in urls]
 
-
-obj = Blah('fsdf')
-obj()
-print(obj())
-
-import os
-
-# Get the current working
-# directory (CWD)
-cwd = os.getcwd()
-
-# Print the current working
-# directory (CWD)
-print("Current working directory:")
-print(cwd)
+loop = asyncio.get_event_loop()
+loop.run_until_complete(asyncio.wait(futures))

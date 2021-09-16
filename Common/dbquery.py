@@ -342,3 +342,84 @@ class Dbquery:
             cursor.execute(query, data)
             record = cursor.fetchone()
             return record
+
+    @staticmethod
+    def get_auth_trans6(data):
+        connection = db_connect_back()
+        with connection:
+            cursor = connection.cursor()
+            query = '''SELECT 
+                        tr6.*
+                        FROM cmssys.trans1 tr1
+                            JOIN cmssys.trans6 tr6 on tr1.intseqno = tr6.intseqno and tr1.keydate = tr6.keydate
+                        WHERE rnn = %s
+                        '''
+            # Выполнение SQL-запроса
+            cursor.execute(query, data)
+            record = cursor.fetchall()
+            colnames = [desc[0] for desc in cursor.description]
+            values = [dict(zip(colnames, val)) for val in record]
+            return values
+
+    @staticmethod
+    def get_fileseqno_by_rrn(data):
+        connection = db_connect_back()
+        with connection:
+            cursor = connection.cursor()
+            query = '''SELECT
+                    split_part(trim(substr(t4.description, 119)), ':', 1) as fileseqno,
+                    split_part(trim(substr(t4.description, 119)), ':', 2) as seqno
+                    FROM cmssys.trans1 t1
+                        JOIN cmssys.trans4 t4 on t1.intseqno = t4.intseqno and t1.keydate = t4.keydate
+                    WHERE t1.rnn = %s
+                    '''
+            # Выполнение SQL-запроса
+            cursor.execute(query, data)
+            record = cursor.fetchone()
+            return record
+
+    @staticmethod
+    def get_tr_visa_aq(data):
+        connection = db_connect_aq()
+        with connection:
+            cursor = connection.cursor()
+            query = '''SELECT
+                    *
+                    FROM vi_clearing.visa_tc5_tcr_0 v1 WHERE v1.fileseqno = %s
+                       AND v1.seqno = %s
+                    '''
+            # Выполнение SQL-запроса
+            cursor.execute(query, data)
+            record = cursor.fetchone()
+            colnames = [desc[0] for desc in cursor.description]
+            values = [val for val in record]
+            new_dict = dict(zip(colnames, values))
+            return new_dict
+
+    @staticmethod
+    def get_acc_otb(data):
+        connection = db_connect_back()
+        with connection:
+            cursor = connection.cursor()
+            query = '''SELECT  cmssys.get_acc_otb(%s, %s)
+                    '''
+            # Выполнение SQL-запроса
+            cursor.execute(query, data)
+            record = cursor.fetchone()
+            return record
+
+    @staticmethod
+    def get_intacccode_by_pan(data):
+        connection = db_connect_back()
+        with connection:
+            cursor = connection.cursor()
+            query = '''SELECT 
+                        c.intacccode,
+                        c.dateacccode
+                        FROM cmssys.card c
+                        WHERE cardbin ||cardbody ||cardcheck = %s
+                        '''
+            # Выполнение SQL-запроса
+            cursor.execute(query, data)
+            record = cursor.fetchone()
+            return record

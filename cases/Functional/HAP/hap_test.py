@@ -1,5 +1,5 @@
-import random
-from datetime import datetime
+from Common import ConstantNL4 as Card4
+from Common import ConstantNL3 as Card3
 from os import environ as env
 from faker import Faker
 from os import path
@@ -13,6 +13,9 @@ import allure
 from Common import ConstantNL4 as Card
 from Common.parser import ParseXLSX
 from Common import trans
+import datetime
+
+from cases.conftest import card_env
 
 headers = {"Content-type": "application/json; charset=UTF-8"}
 IP = env.get('HAP_URL')
@@ -21,9 +24,9 @@ FIRST_NAME = fake.first_name()
 LAST_NAME = fake.last_name()
 ROLE = 'MANUAL_ENTRY'
 FEATURE = 'Проверка HAP методов'
-card17 = Card.ConstantNL4.CARD_6807_NL4
-card1 = Card.ConstantNL4.CARD_9003_NL4
-card2 = Card.ConstantNL4.CARD_6286_NL4
+card17 = Card.ConstantNL4.CARD_6807
+card1 = Card.ConstantNL4.CARD_9003
+card2 = Card.ConstantNL4.CARD_6286
 from_date = '2021-04-30'
 to_date = '2021-04-30'
 test_dir = path.dirname(path.abspath(__file__))
@@ -31,30 +34,7 @@ arn = ' -'
 rrn = '112010000794'
 arn1 = '74570001053705301554129'
 rrn1 = '112009000739'
-
-
-@pytest.fixture(scope="module")
-def post_request(get_token):
-    def _send_post_request(data):
-        url1 = f'{IP}{data.url}'
-        type(data.params)
-        headers = {'Accept': 'application/json;charset=UTF-8', 'Content-Type': 'application/json;charset=UTF-8'}
-        req = requests.post(url1, data=data.params, headers=headers, auth=auth.BearerAuth(get_token))
-        return req
-
-    return _send_post_request
-
-
-@pytest.fixture(scope="module")
-def put_request(get_token):
-    def _send_put_request(data):
-        url1 = f'{IP}{data.url}'
-        type(data.params)
-        headers = {'Accept': 'application/json;charset=UTF-8', 'Content-Type': 'application/json;charset=UTF-8'}
-        req = requests.put(url1, data=data.params, headers=headers, auth=auth.BearerAuth(get_token))
-        return req
-
-    return _send_put_request
+cards = {}
 
 
 @pytest.fixture
@@ -473,16 +453,82 @@ def test_01():
     # cnp.make_reversal(data['de007'], data['de011'], data['de037'], data['de038'], de062)
 
 
-def test_posting():
-    OCT = auth.OCT(card17['de002'], card17['de014'], 7600, 978)
-    VSDC = auth.VSDC(card1['de002'], card1['de014'], 7600, 978, card1['de035'], card1['de052'], card1['de055'])
-    CNP = auth.CNPToken(card17['de002'], card17['de014'], 1000, 978, '4785673328152165')
+@pytest.fixture
+def get_card(card_env, request):
+    return card_env[request.param]
+
+
+@pytest.mark.repeat(5)
+@pytest.mark.parametrize("get_card", ["card2", "card3"], indirect=True)
+@pytest.mark.parametrize("merchant_country_cod",
+                         ["FUMINOR033-A. SAHAROVA 20RIGA         GB",])
+def test_posting(get_card, merchant_country_cod):
+    card = get_card
+    OCT = auth.OCT(card['de002'], card['de014'], 2000, 978)
+    OCT.de043 = merchant_country_cod
+    CNPToken = auth.CNPToken(card['de002'], card['de014'], 600, 978)
+    CNPToken.de043 = merchant_country_cod
+    AFT = auth.AFT(card['de002'], card['de014'], 700, 978)
+    AFT.de043 = merchant_country_cod
+    Recurring = auth.Recurring(card['de002'], card['de014'], 100, 978)
+    Recurring.de043 = merchant_country_cod
+    Refund = auth.Refund(card['de002'], card['de014'], 1000, 978)
+    Refund.de043 = merchant_country_cod
     data_mult = dict()
-    data_mult['0'] = OCT.send_data()
-    # data_mult[1] = VSDC.send_data()
-    # data_mult[2] = CNP.send_data()
+    data_mult[0] = OCT.send_data()
+    data_mult[1] = CNPToken.send_data()
+    data_mult[2] = AFT.send_data()
+    data_mult[3] = Recurring.send_data()
+    data_mult[4] = Refund.send_data()
     t1 = trans.Posting(data_mult)
     t1.make_posting()
+
+
+@pytest.mark.repeat(4)
+@pytest.mark.parametrize("merchant_country_cod",
+                         ["FUMINOR033-A. SAHAROVA 20RIGA         GB", "FUMINOR033-A. SAHAROVA 20RIGA         TR"])
+def test_posting_cash(card_env, merchant_country_cod):
+    card = card_env
+    MCash = auth.MCash(card['card1']['de002'], card['card1']['de014'], 600, 978, card['card1']['de035'],
+                       card['card1']['de052'], card['card1']['de055'])
+    MCash.de043 = merchant_country_cod
+
+    ATMCash = auth.ATMCash(card['card1']['de002'], card['card1']['de014'], 700, 978, card['card1']['de035'],
+                           card['card1']['de052'], card['card1']['de055'])
+    ATMCash.de043 = merchant_country_cod
+    VSDC = auth.VSDC(card['card1']['de002'], card['card1']['de014'], 800, 978, card['card1']['de035'],
+                     card['card1']['de052'], card['card1']['de055'])
+    VSDC.de043 = merchant_country_cod
+    CPToken = auth.CPToken(card['card1']['de002'], card['card1']['de014'], 500, 978, card['card1']['de035'])
+    CPToken.de043 = merchant_country_cod
+    data_mult = dict()
+    data_mult[0] = MCash.send_data()
+    data_mult[1] = ATMCash.send_data()
+    data_mult[2] = VSDC.send_data()
+    data_mult[3] = CPToken.send_data()
+    # t1 = trans.Posting(data_mult)
+    # t1.make_posting()
+
+
+def test_encode_ebcdic():
+    print(auth.Auth.decode('E5F0F0F1F0F0F1F4F6F2F1F2F2F4F4F7F9F7F6F7F6F4F9F1F0F4F1F5F5'))
+    # print(auth.Auth.decode('C289958195838540C4898789A3819340D3899489A3858440C28995819583'))
+    # print(auth.Auth.decode('C8A48240F2F640C8A495A2A69699A38840D38195856B40C393858392888581A396956B'))
+    # print(auth.Auth.decode('C393858392888581A39695'))
+    # print(auth.Auth.decode('F8F2F6'))
+    # print(auth.Auth.decode('F0F4'))
+    # print(auth.Auth.decode('89829996408194819989938496'))
+
+
+def test_trans(card_env):
+    card = card_env
+    CNPToken = auth.CNPToken(card['card4']['de002'], card['card4']['de014'], 1000, 978)
+    STIP = CNPToken.make_stip('00')
+    CNPToken.send_data(STIP)
+    # data_mult = dict()
+    # data_mult[0] = CNPToken.send_data()
+    # t1 = trans.Posting(data_mult)
+    # t1.make_posting()
 
 
 def calculate_trans(data):
@@ -503,56 +549,9 @@ def get_exchange_rate(auth_val, bill_val):
     return round(auth_val / bill_val, 4)
 
 
-def test_statemetn_1():
-    start_date = '2021-08-01'
-    end_date = '2021-08-31'
-    account_number = 'IDC21452A'
-    card_code = dbquery.Dbquery.get_accno_by_pan([card17['de002']])[0]
-    trans_data = dbquery.Dbquery.get_data_statement((card_code, start_date, end_date))
-    calculate_trans(trans_data)
-    print(trans_data)
-    person = dbquery.Dbquery.get_person_data((card_code,))
-    r_name = f"{person[2]} {person[3]}"
-    r_address = f"{person[7]} {person[5]} {person[6]} {person[8]}"
-    r_period = f"{start_date.replace('-', '/')} - {end_date.replace('-', '/')}"
-    r_account = account_number
-    r_currency_acc = person[9]
-    r_debit = calculate_trans(trans_data)['debit']
-    r_credit = calculate_trans(trans_data)['credit']
-
-    for value in trans_data:
-        auth_val = value['transvalue']
-        bill_val = value['billvalue']
-        rate = get_exchange_rate(auth_val, bill_val)
-        r_posting_date = value['postingdate'].strftime("%Y-%m-%d")
-        r_tid = value['tid']
-        r_details = {
-            'ttype': 'Purchase',
-            'auth_date': value['datetime'],
-            'card': convert_card(value['card']),
-            'amount': value['transvalue'],
-            'currency': value['transcur'],
-            'rate': rate if (value['transcur'] != value['billcur']) else '',
-            'mercname': value['mercname'],
-            'country': value['country']
-        }
-        r_trans_amount = value['billvalue']
-        r_trans_cur = value['billcur']
-        print(r_posting_date, r_tid, r_details, r_trans_amount, r_trans_cur)
-
-    print(r_name, r_address, r_period, r_account, r_currency_acc, r_debit, r_credit)
-
-    # new_card = create_new_card_manual(api_client, get_token, '00020001-628670672903', '00020001-628670672903')
-    # print(new_card.text)
-
-
-def test_statemetn_2():
-    pan = dbquery.Dbquery.get_pan_by_appid(('00020001-628686699885',))
-    print(pan)
-
-
 def test_create_person():
-    card_data = card_api.PersonData('00010001', '100092', FIRST_NAME, LAST_NAME)
+    # add_role()
+    card_data = card_api.PersonData('00010001', '100002', FIRST_NAME, LAST_NAME)
     card_data.create()
     # card_data.send_data()
     # resp = api_client.post(path='manual_entry/create_new_person',
@@ -562,3 +561,14 @@ def test_create_person():
     # print(json.dumps(json.loads(resp.text), sort_keys=True, indent=4))
     # with allure.step('Создали нового персона'):
     #     return resp
+
+
+@pytest.fixture
+def get_card(card_env, request):
+    return card_env[request.param]
+
+
+@pytest.mark.parametrize("get_card", ["card2", "card3"], indirect=True)
+def test_indirect(get_card):
+    card = get_card
+    assert len(get_card) == 3

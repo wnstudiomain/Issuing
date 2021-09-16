@@ -1,3 +1,5 @@
+from Common import ConstantNL4 as Card4
+from Common import ConstantNL3 as Card3
 from os import environ as env
 from Common import auth
 from Common import card_api
@@ -13,6 +15,23 @@ fake = Faker()
 
 FIRST_NAME = fake.first_name()
 LAST_NAME = fake.last_name()
+
+
+@pytest.fixture(scope="class")
+def card_env():
+    if env.get('ENV') == 'nl4':
+        return {
+            'card1': Card4.ConstantNL4.CARD_9003,
+            'card2': Card4.ConstantNL4.CARD_6807,
+            'card3': Card4.ConstantNL4.CARD_6286,
+            'card4': Card4.ConstantNL4.CARD_8712
+        }
+    else:
+        return {
+            'card3': Card3.ConstantNL3.CARD_1196,
+            'card2': Card3.ConstantNL3.CARD_2814,
+            'card4': Card3.ConstantNL3.CARD_2005
+        }
 
 
 @pytest.fixture(scope="module")

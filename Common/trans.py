@@ -4,6 +4,7 @@ from Common.auth import Auth
 import os
 from os import environ as env
 from Common.ssh_client import SSh as SSHClient
+from Common.dbquery import Dbquery as Query
 
 
 class Posting:
@@ -16,6 +17,9 @@ class Posting:
     PORT = env.get('SSH_PORT')
     USER = env.get('SSH_USER')
     VI_FILE_PATH = "/srv/data/IncomingVI/"
+    arn = ''
+    tr_code = ''
+    tr_code_q = ''
 
     def __init__(self, data):
         self.data = data
@@ -85,8 +89,9 @@ class Posting:
                 return output
 
     def make_tc5_batch(self):
+        batch = ''
         for key, data in self.data.items():
-            if data['de039'] is not None and data['de039'] != '05':
+            if data['de039'] is not None and data['de039'] == '00':
                 tr_code = {
                     '26': '26' if (data['mti'] == '0420') else '06',
                     '00': '25' if (data['mti'] == '0420') else '05',
@@ -105,6 +110,7 @@ class Posting:
                 transaction_code = '06'
                 acquirers_business_id = "00000000"
                 acquirer_reference_number = f"745700010537053015{random.randint(10000, 99999)}"
+                self.arn = acquirer_reference_number
                 purchase_date = datetime.datetime.today().strftime("%m%d")
                 destination_amount = data['de006'] if data.get('de006') is not None else '000000000000'
                 destination_currency_code = data['de051'] if data.get('de051') is not None else '978'
@@ -130,9 +136,10 @@ class Posting:
                 card_acceptor_id = data['de042']
                 terminal_id = data['de041']
                 national_reimbursement_fee = "000000000000"
-                mail_phone_electronic_commerce_and_payment_indicator = data['de060'][9:10] if data.get('de060')[9:10] is not None else ' '
+                mail_phone_electronic_commerce_and_payment_indicator = data['de060'][9:10] if data.get('de060')[
+                                                                                              9:10] is not None else ' '
                 special_chargeback_indicator = " "
-                interface_trace_number = Auth.pref37field()[0:4] + '00'
+                interface_trace_number = Auth._pref37field()[0:4] + '00'
                 acceptance_terminal_indicator = " "
                 prepaid_card_indicator = " "
                 service_development_field = " "
@@ -155,9 +162,14 @@ class Posting:
                 visa_internal_use_only = "                "
                 surcharge_amount_in_cardholder_billing_currency = "00000000"
                 money_transfer_foreign_exchange_fee = "00000000"
-                payment_account_reference = Auth.decode(data['de056']['01']['1']) if data.get('de056') is not None and data.get('de056').get('01') is not None and data.get('de056').get('01').get('1') is not None else "                             "
-                token_requestor_id = Auth.decode(data['de123']['68']['3']) if data.get('de123') is not None and data.get('de123').get('68') is not None and data.get('de123').get('68').get('3') is not None else "           "
-                transaction_identifier = data['de062']['2'] if data.get('de062') is not None and data.get('de062').get('2') is not None else f"3001633827{random.randint(10000, 99999)}"
+                payment_account_reference = Auth.decode(data['de056']['01']['1']) if data.get(
+                    'de056') is not None and data.get('de056').get('01') is not None and data.get('de056').get(
+                    '01').get('1') is not None else "                             "
+                token_requestor_id = Auth.decode(data['de123']['68']['3']) if data.get(
+                    'de123') is not None and data.get('de123').get('68') is not None and data.get('de123').get(
+                    '68').get('3') is not None else '           '
+                transaction_identifier = data['de062']['2'] if data.get('de062') is not None and data.get('de062').get(
+                    '2') is not None else f"3001633827{random.randint(10000, 99999)}"
                 authorized_amount = data['de006'] if data.get('de006') is not None else '000000000000'
                 authorization_currency_code = data['de051'] if data.get('de051') is not None else '978'
                 authorization_response_code = data['de038']
@@ -180,16 +192,21 @@ class Posting:
                 source_currency_to_base_currency_exchange_rate = "00000000"
                 base_currency_to_destination_currency_exchange_rate = "00000000"
                 optional_issuer_isa_amount = "000000000000"
-                product_id = data['de062']['23'] if data.get('de062') is not None and data.get('de062').get('23') is not None else "F"
+                product_id = data['de062']['23'] if data.get('de062') is not None and data.get('de062').get(
+                    '23') is not None else "F"
                 program_id = "      "
                 dynamic_currency_conversion_indicator = " "
                 reserved1 = "     "
-                token = Auth.decode(data['de123']['68']['1']) if data.get('de123') is not None and data.get('de123').get('68') is not None and data.get('de123').get('68').get('1') is not None else "0000000000000000"
+                token = Auth.decode(data['de123']['68']['1']) if data.get('de123') is not None and data.get(
+                    'de123').get('68') is not None and data.get('de123').get('68').get(
+                    '1') is not None else "4785673328152165"
                 reserved2 = "  "
                 cvv2_result_code = " "
                 transaction_code = tr_code[data['de003'][0:2]] if data['de003'][0:2] in tr_code else '05'
+                self.tr_code = transaction_code
                 transaction_code_qualifier = tr_code_qualifier[data['de003'][0:2]] if data['de003'][
                                                                                       0:2] in tr_code_qualifier else '0'
+                self.tr_code_q = transaction_code_qualifier
                 if data['de003'][0:2] == '11':
                     transaction_code = '15'
                     business_format_code = 'DF'
@@ -207,7 +224,7 @@ class Posting:
                          + avs_response_code + authorization_source_code + purchase_identifier_format + account_selection + instalment_payment_count \
                          + purchase_identifier + cashback + chip_condition_code + pos_environment
                 if payment_account_reference == "                             " and token_requestor_id == "           ":
-                    fourth = ""
+                    fourth = None
                 else:
                     fourth = transaction_code + transaction_code_qualifier + "4" + "          " + business_format_code + network_identification_code + contact_information \
                              + adjustment_processing_indicator + message_reason_code + surcharge_amount + surcharge_credit_debit_indicator \
@@ -224,12 +241,20 @@ class Posting:
                         + optional_issuer_isa_amount + product_id + program_id + dynamic_currency_conversion_indicator + reserved1 + token \
                         + reserved2 + cvv2_result_code
                 seventh = ""
-                output = first + \
-                         "\r\n" + second + \
-                         "\r\n" + fourth + \
-                         "\r\n" + fifth + \
-                         "\r\n" + seventh
-                return output
+                if fourth is not None:
+                    output = first + \
+                             "\r\n" + second + \
+                             "\r\n" + fourth + \
+                             "\r\n" + fifth + \
+                             "\r\n" + seventh
+                else:
+                    output = first + \
+                             "\r\n" + second + \
+                             "\r\n" + fifth + \
+                             "\r\n" + seventh
+                batch = batch + output
+
+        return batch
 
     def make_data_vi(self):
         batch = {
@@ -261,3 +286,13 @@ class Posting:
         ssh_posting = SSHClient(self.POSTING_IP, self.PORT, self.USER)
         date_posting = datetime.datetime.today().strftime("%Y-%m-%d")
         ssh_posting.run_jar(self.POSTING_BIN_FOLDER, self.POSTING_BIN_APP, date_posting)
+        return
+
+
+def get_data_trans_from_aq(rrn):
+    for i in range(4):
+        fileseqno = Query.get_fileseqno_by_rrn((rrn,))
+        if fileseqno is not None:
+            break
+    trans_data = Query.get_tr_visa_aq(fileseqno)
+    return trans_data
